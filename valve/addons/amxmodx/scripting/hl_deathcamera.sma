@@ -4,15 +4,21 @@
 #include <engine>
 #include <xs>
 
+new const PLUGIN_NAME	[] 	= "Death Camera";
+new const PLUGIN_VERSION[] 	= "0.2";
+new const PLUGIN_AUTHOR	[] 	= "Aoi.Kagase";
+
+new const gClassName	[] 	= "DeathCamera";
+
 new gEntCamera;
-new g_iPlayerCamera[MAX_PLAYERS + 1];
+new g_iPlayerCamera		[MAX_PLAYERS + 1];
 
 public plugin_init()
 {
-	register_plugin("Death Camera", "0.1", "Aoi.Kagase");
+	register_plugin(PLUGIN_NAME, PLUGIN_VERSION, PLUGIN_AUTHOR);
 
-	RegisterHamPlayer(Ham_TakeDamage, "OnTakeDamagePre", 0);
-	RegisterHamPlayer(Ham_Spawn, "OnSpawned", 1);
+	RegisterHamPlayer(Ham_TakeDamage, 	"OnTakeDamagePre", 0);
+	RegisterHamPlayer(Ham_Spawn, 		"OnSpawned", 1);
 
 	RegisterHam(Ham_Think, "trigger_camera", "CameraThink", 1);
 
@@ -28,7 +34,8 @@ public client_disconnected(client)
 	if (pev_valid(g_iPlayerCamera[client]))
 	{
 		set_pev(g_iPlayerCamera[client], pev_flags, pev(g_iPlayerCamera[client], pev_flags) | FL_KILLME);
-		engfunc(EngFunc_RemoveEntity, g_iPlayerCamera[client]);
+		dllfunc(DLLFunc_Think, g_iPlayerCamera[client]);
+		g_iPlayerCamera[client] = -1;
 	}
 }
 
@@ -65,7 +72,7 @@ public OnTakeDamagePre(client, idinflictor, idattacker, Float:damage, damagebits
 				static Float:vAngle[3];
 
 				// Set camera info.
-				set_pev(iEnt, pev_classname, 	"DeathCamera");
+				set_pev(iEnt, pev_classname, 	gClassName);
 				set_pev(iEnt, pev_spawnflags,	SF_CAMERA_PLAYER_TARGET);
 				set_pev(iEnt, pev_flags, 		pev(iEnt, pev_flags) | FL_ALWAYSTHINK);
 				set_pev(iEnt, pev_owner, 		client);
@@ -74,7 +81,26 @@ public OnTakeDamagePre(client, idinflictor, idattacker, Float:damage, damagebits
 				pev(client, pev_origin, 		vPlayerOrigin);
 				pev(client, pev_v_angle,		vAngle);
 				xs_vec_copy(vPlayerOrigin, 		vCamOrigin);
+				vPlayerOrigin[2] += 1.0;
 				vCamOrigin[2] += 120.0;
+				// Check over wall.
+			    // create the trace handle.
+				static trace; trace = create_tr2();
+				// get wall position to vNewOrigin.
+				engfunc(EngFunc_TraceLine, vPlayerOrigin, vCamOrigin, (IGNORE_MISSILE | IGNORE_MONSTERS | IGNORE_GLASS), client, trace);
+				{
+					static Float:fFraction;
+					get_tr2(trace, TR_flFraction, fFraction);
+			
+					// -- We hit something!
+					if (fFraction < 1.0)
+					{
+						// -- Save results to be used later.
+						get_tr2(trace, TR_vecEndPos, vCamOrigin);
+					}
+				}
+				// free the trace handle.
+				free_tr2(trace);
 
 				// Calculate Top/Down Angle.
 				xs_vec_sub(vCamOrigin, vPlayerOrigin, vAngle);
@@ -100,7 +126,6 @@ public OnTakeDamagePre(client, idinflictor, idattacker, Float:damage, damagebits
 
 				// I don't know this.
 				set_ent_data_float(iEnt, "CTriggerCamera", "m_flWait", 999999.0);
-
 				// Camera Viewing.
 				ExecuteHam(Ham_Use, iEnt, client, client, USE_TOGGLE, 1.0);
 			}
@@ -143,7 +168,7 @@ public CameraThink(iEnt)
 		pev(iEnt, pev_classname, classname, charsmax(classname));
 
 		// Death Camera?
-		if (equali(classname, "DeathCamera"))
+		if (equali(classname, gClassName))
 		{
 			// One execute.
 			if (pev(iEnt, pev_iuser4) == 1)
@@ -161,6 +186,7 @@ public CameraThink(iEnt)
 
 				// Executed.
 				set_pev(iEnt, pev_iuser4, 1);
+				client_print(pev(iEnt, pev_owner), print_chat, "CameraThink");
 			}
 		}
 	}
